@@ -65,8 +65,23 @@ async function run() {
       res.send({ token });
     });
 
+    // Middleware that is using the database
+    // !WARNING: use verifyJWT before using verifyAdmin
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== "admin") {
+        return res
+          .status(403)
+          .send({ error: true, message: "Forbidden Message" });
+      }
+      next();
+    };
+
+    // All APIs
     // users related apis
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
 
       res.send(result);
@@ -82,6 +97,23 @@ async function run() {
       }
 
       const result = await usersCollection.insertOne(user);
+
+      res.send(result);
+    });
+
+    // Admin related API
+    // verifyJWT is the 1st security layer
+    app.get("/users/admin/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      // 2nd layer security
+      if (req.decoded.email !== email) {
+        return res.send({ admin: false });
+      }
+
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const result = { admin: user?.role === "admin" };
 
       res.send(result);
     });
@@ -102,6 +134,13 @@ async function run() {
     // Menu related APIs
     app.get("/menu", async (req, res) => {
       const result = await menuCollection.find().toArray();
+
+      res.send(result);
+    });
+
+    app.post("/menu", verifyJWT, verifyAdmin, async (req, res) => {
+      const newItem = req.body;
+      const result = await menuCollection.insertOne(newItem);
 
       res.send(result);
     });
